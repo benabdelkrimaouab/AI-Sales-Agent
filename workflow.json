@@ -1,0 +1,1441 @@
+{
+  "name": "AI Sales Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-sales-agent-lead",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "d913602e-c795-4434-8767-398de943262b",
+      "name": "Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "1e60e78b-9f91-4f1b-8a1f-dd29b0411027"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "name",
+              "value": "={{ $json.body?.name ?? $json.name ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "email",
+              "value": "={{ $json.body?.email ?? $json.email ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "phone",
+              "value": "={{ $json.body?.phone ?? $json.phone ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "company",
+              "value": "={{ $json.body?.company ?? $json.company ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "budget",
+              "value": "={{ $json.body?.budget ?? $json.budget ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "message",
+              "value": "={{ $json.body?.message ?? $json.message ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "receivedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c95744f4-6b2f-43fc-a469-45ae2007c5d6",
+      "name": "Normalize Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead details:\nName: {{ $json.name }}\nCompany: {{ $json.company }}\nBudget: {{ $json.budget }}\nMessage: {{ $json.message }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a B2B sales qualification analyst. Score the lead from 1-10 using this weighted rubric: (1) Budget clarity and size, 40% — a specific number/range scores higher than vague or missing budget, and larger budgets score higher than smaller ones; (2) Urgency signals in the message, 30% — explicit timeframes or pressure score higher; (3) Legitimacy and decision-maker tone, 30% — a named company and confident, authoritative language scores higher than a vague or hesitant tone. Weigh all three factors together — a small budget with strong urgency and legitimacy can still outscore a large budget with a weak, hesitant message. A lead is \"qualified\" (qualified: true) only if score >= 6. Always return a short, specific reason (max 20 words) referencing which factors drove the score, and one concrete suggested_next_step. Respond only in the required JSON format."
+        }
+      },
+      "id": "b6abeeac-96a5-453d-9d0e-b43ae9f4fb8f",
+      "name": "Qualify Lead",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        400,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "openai/gpt-oss-120b",
+          "mode": "list",
+          "cachedResultName": "openai/gpt-oss-120b"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "76629559-44db-45b4-b590-6d20a3aac208",
+      "name": "Qualification Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        528
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "gtCBmV54BYy0XGBP",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"score\": 8, \"qualified\": true, \"reason\": \"Clear budget, urgent need, decision-maker tone\", \"suggested_next_step\": \"Book a discovery call within 48 hours\" }"
+      },
+      "id": "a8cc0ad5-7c6f-475a-9ce4-9921a1b4cb25",
+      "name": "Qualification Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.output.qualified }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": "",
+              "id": "21fc73d4-6c5e-44ae-99ec-9fb53a3905a4"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "id": "553b6aca-f12f-4219-824a-33ead89865a8",
+      "name": "Is Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a warm, professional welcome email to {{ $(\"Normalize Lead Data\").item.json.name }} from {{ $(\"Normalize Lead Data\").item.json.company }}.\nTheir message was: \"{{ $(\"Normalize Lead Data\").item.json.message }}\"\nPropose a short discovery call and mention we will send a calendar invite shortly.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a friendly, professional sales development rep. Write concise emails (under 120 words), warm tone, no generic filler, always end with a clear next step. Respond only in the required JSON format with subject and body fields. Use \\n for line breaks in body."
+        }
+      },
+      "id": "10b6dfd8-c824-40c2-97ff-6117faa768e2",
+      "name": "Draft Welcome Email",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        880,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "openai/gpt-oss-120b",
+          "mode": "list",
+          "cachedResultName": "openai/gpt-oss-120b"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.6
+        }
+      },
+      "id": "ad635de8-3ab7-4dfb-b424-cf6bc40ff98a",
+      "name": "Welcome Email Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        144
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "gtCBmV54BYy0XGBP",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"subject\": \"Great to hear from you, Sarah!\", \"body\": \"Hi Sarah,\\n\\nThanks for reaching out...\" }"
+      },
+      "id": "c8e2b3ac-ecde-47a5-9438-ad4af57d7133",
+      "name": "Welcome Email Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1040,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "awebsolo23@gmail.com"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $now.toISO() }}",
+        "timeMax": "={{ $now.plus(10, 'days').toISO() }}",
+        "options": {
+          "orderBy": "startTime"
+        }
+      },
+      "id": "26a67969-3a90-4f5a-80b6-bee5a46a14c1",
+      "name": "Get Upcoming Bookings",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        304
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "A4FJA9rg7V9ejFnj",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "awebsolo23@gmail.com"
+        },
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ $(\"Normalize Lead Data\").item.json.email }}"
+          ],
+          "description": "=Lead message: {{ $(\"Normalize Lead Data\").item.json.message }}\nBudget: {{ $(\"Normalize Lead Data\").item.json.budget }}\nPhone: {{ $(\"Normalize Lead Data\").item.json.phone }}",
+          "sendUpdates": "all",
+          "summary": "=Discovery Call with {{ $(\"Normalize Lead Data\").item.json.name }} ({{ $(\"Normalize Lead Data\").item.json.company }})"
+        }
+      },
+      "id": "f3c32420-4f7e-4c6f-9cde-bca53573d7ba",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1328,
+        304
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "A4FJA9rg7V9ejFnj",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5732260610",
+        "text": "=🔥 New QUALIFIED lead!\nName: {{ $(\"Normalize Lead Data\").item.json.name }}\nCompany: {{ $(\"Normalize Lead Data\").item.json.company }}\nBudget: {{ $(\"Normalize Lead Data\").item.json.budget }}\nScore: {{ $(\"Qualify Lead\").item.json.output.score }}/10\nCall booked: {{ $(\"Create Calendar Event\").item.json.htmlLink }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "b44b947b-8b77-48ed-bdc3-72bbdfaee816",
+      "name": "Notify Team - Hot Lead",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        224
+      ],
+      "webhookId": "99b80b5d-9f2e-4b2c-a94a-217a8cc29852",
+      "credentials": {
+        "telegramApi": {
+          "id": "UDWoQcerLsbLOYfR",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "Name",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "Email",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "Phone",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "Company",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.company }}",
+              "type": "string"
+            },
+            {
+              "id": "c5",
+              "name": "Budget",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.budget }}",
+              "type": "string"
+            },
+            {
+              "id": "c6",
+              "name": "Message",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "c7",
+              "name": "LeadScore",
+              "value": "={{ $(\"Qualify Lead\").item.json.output.score }}",
+              "type": "number"
+            },
+            {
+              "id": "c8",
+              "name": "Qualified",
+              "value": "Qualified",
+              "type": "string"
+            },
+            {
+              "id": "c9",
+              "name": "Reason",
+              "value": "={{ $(\"Qualify Lead\").item.json.output.reason }}",
+              "type": "string"
+            },
+            {
+              "id": "c10",
+              "name": "SuggestedNextStep",
+              "value": "={{ $(\"Qualify Lead\").item.json.output.suggested_next_step }}",
+              "type": "string"
+            },
+            {
+              "id": "c11",
+              "name": "Status",
+              "value": "Booked",
+              "type": "string"
+            },
+            {
+              "id": "c12",
+              "name": "AppointmentLink",
+              "value": "={{ $(\"Create Calendar Event\").item.json.htmlLink }}",
+              "type": "string"
+            },
+            {
+              "id": "c13",
+              "name": "CreatedAt",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.receivedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "c14",
+              "name": "LeadId",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.email }}-{{ $(\"Normalize Lead Data\").item.json.receivedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9f345228-0c0e-4525-bf36-2feb07bea674",
+      "name": "Prepare CRM Record - Booked",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1760,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appdHhJeUfDsZeAYg",
+          "cachedResultName": "Sales Leads CRM"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblHflkbycH5tj3vi",
+          "cachedResultName": "Leads"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Budget",
+              "displayName": "Budget",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LeadScore",
+              "displayName": "LeadScore",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Qualified",
+              "displayName": "Qualified",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Qualified",
+                  "value": "Qualified"
+                },
+                {
+                  "name": "Not Qualified",
+                  "value": "Not Qualified"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "SuggestedNextStep",
+              "displayName": "SuggestedNextStep",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Booked",
+                  "value": "Booked"
+                },
+                {
+                  "name": "Nurture",
+                  "value": "Nurture"
+                },
+                {
+                  "name": "Pending",
+                  "value": "Pending"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AppointmentLink",
+              "displayName": "AppointmentLink",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "CreatedAt",
+              "displayName": "CreatedAt",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LeadId",
+              "displayName": "LeadId",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "ea5b3910-c713-4846-9776-146bff01ead3",
+      "name": "Save to CRM - Booked",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1984,
+        384
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "BJWcSSOYsEgSbuSB",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a polite thank-you email to {{ $(\"Normalize Lead Data\").item.json.name }} from {{ $(\"Normalize Lead Data\").item.json.company }}.\nTheir message was: \"{{ $(\"Normalize Lead Data\").item.json.message }}\"\nLet them know we will follow up as soon as a good fit opportunity comes up, and invite them to reach out again anytime.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a friendly, professional sales development rep. Write concise, warm thank-you emails (under 100 words) for leads that are not an immediate fit, without sounding dismissive. Respond only in the required JSON format with subject and body fields. Use \\n for line breaks in body."
+        }
+      },
+      "id": "e500371e-4896-4cfb-beae-f0d0a109430d",
+      "name": "Draft Nurture Email",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        880,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "openai/gpt-oss-120b",
+          "mode": "list",
+          "cachedResultName": "openai/gpt-oss-120b"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.6
+        }
+      },
+      "id": "06385d5f-7660-40d0-839a-44d4b79a0a22",
+      "name": "Nurture Email Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        704
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "gtCBmV54BYy0XGBP",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"subject\": \"Thanks for reaching out!\", \"body\": \"Hi there,\\n\\nThank you for...\" }"
+      },
+      "id": "a7e236a0-bbeb-4374-9789-76cfb23b9671",
+      "name": "Nurture Email Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1056,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"Normalize Lead Data\").item.json.email }}",
+        "subject": "={{ $(\"Draft Nurture Email\").item.json.output.subject }}",
+        "emailType": "text",
+        "message": "={{ $(\"Draft Nurture Email\").item.json.output.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e6c114ef-0ad6-4e21-826c-bdeaeb3dfe44",
+      "name": "Send Nurture Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1136,
+        512
+      ],
+      "webhookId": "866feda7-8366-489c-9972-ac43d84c20ee",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rkqqLcikIiKfDr6O",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n1",
+              "name": "Name",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "n2",
+              "name": "Email",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "n3",
+              "name": "Phone",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "n4",
+              "name": "Company",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.company }}",
+              "type": "string"
+            },
+            {
+              "id": "n5",
+              "name": "Budget",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.budget }}",
+              "type": "string"
+            },
+            {
+              "id": "n6",
+              "name": "Message",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "n7",
+              "name": "LeadScore",
+              "value": "={{ $(\"Qualify Lead\").item.json.output.score }}",
+              "type": "number"
+            },
+            {
+              "id": "n8",
+              "name": "Qualified",
+              "value": "Not Qualified",
+              "type": "string"
+            },
+            {
+              "id": "n9",
+              "name": "Reason",
+              "value": "={{ $(\"Qualify Lead\").item.json.output.reason }}",
+              "type": "string"
+            },
+            {
+              "id": "n10",
+              "name": "SuggestedNextStep",
+              "value": "={{ $(\"Qualify Lead\").item.json.output.suggested_next_step }}",
+              "type": "string"
+            },
+            {
+              "id": "n11",
+              "name": "Status",
+              "value": "Nurture",
+              "type": "string"
+            },
+            {
+              "id": "n12",
+              "name": "AppointmentLink",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "n13",
+              "name": "CreatedAt",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.receivedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "n14",
+              "name": "LeadId",
+              "value": "={{ $(\"Normalize Lead Data\").item.json.email }}-{{ $(\"Normalize Lead Data\").item.json.receivedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1964ebeb-8a52-40f5-97ce-cab1cffc85cf",
+      "name": "Prepare CRM Record - Nurture",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1328,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appdHhJeUfDsZeAYg",
+          "cachedResultName": "Sales Leads CRM"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblHflkbycH5tj3vi",
+          "cachedResultName": "Leads"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Budget",
+              "displayName": "Budget",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LeadScore",
+              "displayName": "LeadScore",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Qualified",
+              "displayName": "Qualified",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Qualified",
+                  "value": "Qualified"
+                },
+                {
+                  "name": "Not Qualified",
+                  "value": "Not Qualified"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "SuggestedNextStep",
+              "displayName": "SuggestedNextStep",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Booked",
+                  "value": "Booked"
+                },
+                {
+                  "name": "Nurture",
+                  "value": "Nurture"
+                },
+                {
+                  "name": "Pending",
+                  "value": "Pending"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AppointmentLink",
+              "displayName": "AppointmentLink",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "CreatedAt",
+              "displayName": "CreatedAt",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LeadId",
+              "displayName": "LeadId",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "84252070-5327-42bb-9da8-a165507889e1",
+      "name": "Save to CRM - Nurture",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1552,
+        512
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "BJWcSSOYsEgSbuSB",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## AI Sales Agent\nWebhook receives a new lead → AI qualifies it (score 1-10) → routes to a Qualified or Nurture path automatically.",
+        "height": 200,
+        "width": 520,
+        "color": 4
+      },
+      "id": "424c5407-1e4d-454f-a665-2d52ca440b08",
+      "name": "Sticky Note ad856733",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## AI Qualification\nGPT-5 mini scores the lead and returns structured JSON: score, qualified, reason, suggested_next_step.",
+        "height": 400,
+        "width": 520,
+        "color": 6
+      },
+      "id": "414d0281-845b-4f60-95a5-9ed01b7b779d",
+      "name": "Sticky Note 84592f3e",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        48,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Path A - Qualified Lead\nAI drafts a personalized welcome email → checks Google Calendar availability → books a discovery call → sends the email with the invite link → alerts the sales team on Telegram → logs to CRM (Status: Booked).",
+        "height": 440,
+        "width": 1400,
+        "color": 3
+      },
+      "id": "c8ea37f3-2027-4ce0-b5da-c00e5c780902",
+      "name": "Sticky Note 981468ce",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -512
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Path B - Not Qualified\nAI drafts a friendly thank-you email → sends it → logs the lead to CRM (Status: Nurture) for future follow-up.",
+        "height": 320,
+        "width": 960,
+        "color": 5
+      },
+      "id": "853bc265-8c4e-4def-bbce-c3e27e6fd339",
+      "name": "Sticky Note a6d7fdf0",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Idempotency\nAirtable \"Save to CRM\" nodes use upsert with Email as the matching column: resubmitting the same lead email updates the existing record instead of creating a duplicate.",
+        "height": 256,
+        "color": 7
+      },
+      "id": "c83b5d44-b71c-4dd4-b19a-e8af48b615e0",
+      "name": "Sticky Note e2af13d9",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"Normalize Lead Data\").item.json.email }}",
+        "subject": "={{ $(\"Draft Welcome Email\").item.json.output.subject }}",
+        "emailType": "text",
+        "message": "={{ $(\"Draft Welcome Email\").item.json.output.body }}\n\nCalendar invite: {{ $(\"Create Calendar Event\").item.json.htmlLink }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2f748f5a-a10c-4496-a6f3-bceb619e0742",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1552,
+        304
+      ],
+      "webhookId": "6690f592-830b-4303-b983-2e845f80b7fc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rkqqLcikIiKfDr6O",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const busy = $input.all().map(item => ({\n  start: item.json.start?.dateTime,\n  end: item.json.end?.dateTime\n})).filter(b => b.start && b.end).map(b => ({ start: DateTime.fromISO(b.start), end: DateTime.fromISO(b.end) }));\n\nconst slotMinutes = 30;\nconst businessStartHour = 9;\nconst businessEndHour = 17;\n\nfunction overlaps(slotStart, slotEnd) {\n  return busy.some(b => slotStart < b.end && slotEnd > b.start);\n}\n\nlet cursor = $now.plus({ days: 1 }).set({ hour: businessStartHour, minute: 0, second: 0, millisecond: 0 });\nconst deadline = $now.plus({ days: 10 });\nlet found = null;\n\nwhile (cursor < deadline) {\n  const weekday = cursor.weekday; // 1=Mon ... 7=Sun\n  if (weekday > 5) {\n    cursor = cursor.plus({ days: 1 }).set({ hour: businessStartHour, minute: 0 });\n    continue;\n  }\n  if (cursor.hour >= businessEndHour) {\n    cursor = cursor.plus({ days: 1 }).set({ hour: businessStartHour, minute: 0 });\n    continue;\n  }\n  const slotEnd = cursor.plus({ minutes: slotMinutes });\n  if (!overlaps(cursor, slotEnd)) {\n    found = { start: cursor.toISO(), end: slotEnd.toISO() };\n    break;\n  }\n  cursor = slotEnd;\n}\n\nif (!found) {\n  const fallbackStart = $now.plus({ days: 1 }).set({ hour: businessStartHour, minute: 0 });\n  found = { start: fallbackStart.toISO(), end: fallbackStart.plus({ minutes: slotMinutes }).toISO() };\n}\n\nreturn [{ json: found }];"
+      },
+      "id": "17b56db4-09a0-4e54-89e7-d950327d1ebc",
+      "name": "Find Next Available Slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Qualify Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualify Lead": {
+      "main": [
+        [
+          {
+            "node": "Is Qualified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualification Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Qualify Lead",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualification Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Qualify Lead",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Qualified?": {
+      "main": [
+        [
+          {
+            "node": "Draft Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Nurture Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Get Upcoming Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome Email Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Draft Welcome Email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome Email Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Draft Welcome Email",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Team - Hot Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare CRM Record - Booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare CRM Record - Booked": {
+      "main": [
+        [
+          {
+            "node": "Save to CRM - Booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Nurture Email": {
+      "main": [
+        [
+          {
+            "node": "Send Nurture Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nurture Email Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Draft Nurture Email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nurture Email Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Draft Nurture Email",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Nurture Email": {
+      "main": [
+        [
+          {
+            "node": "Prepare CRM Record - Nurture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare CRM Record - Nurture": {
+      "main": [
+        [
+          {
+            "node": "Save to CRM - Nurture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Notify Team - Hot Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Upcoming Bookings": {
+      "main": [
+        [
+          {
+            "node": "Find Next Available Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Next Available Slot": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "errorWorkflow": "14gIVVCggVMANajH"
+  },
+  "versionId": "00707184-4b0e-43c6-9389-4efd6b3ad5e1",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de6bea99776368092b7be0fb78b0a8fb47359bc344f3b1671f6ed9babeb5a2a3"
+  },
+  "nodeGroups": [],
+  "id": "Qsm5GLcy5Xf8mK4m",
+  "tags": []
+}
